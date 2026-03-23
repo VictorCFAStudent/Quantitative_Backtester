@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "strategy_lab"
+version = "0.1.0"
+description = "A backtesting framework for Computational Investing"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas",
+    "numpy",
+    "streamlit",
+    "yfinance",
+    "plotly",
+    "matplotlib",
+    "scipy",
+    "reportlab",
+    "scikit-learn",
+    ]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    ]
