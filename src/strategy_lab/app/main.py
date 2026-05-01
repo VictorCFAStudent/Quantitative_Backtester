@@ -304,7 +304,7 @@ if run:
 
 # ── Display results ──────────────────────────────────────────────────────────
 if "all_results" not in st.session_state:
-    st.info("Set parameters in the sidebar and click **Fetch data & run all strategies**.")
+    st.info("Set parameters in the sidebar and click **Fetch data & run selected strategies**.")
     st.stop()
 
 # Show late-ticker warnings (persisted from run)

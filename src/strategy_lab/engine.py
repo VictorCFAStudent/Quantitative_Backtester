@@ -5,14 +5,23 @@ from scipy.optimize import minimize
 from sklearn.covariance import ledoit_wolf
 
 def equal_weight(returns: pd.DataFrame) -> pd.Series:
-    """Return an equal-weight allocation across all assets in returns."""
+    """Equal-weight allocation across all assets in *returns*.
+
+    *returns* are expected to be log returns, but this function does not
+    use them numerically — only the column set matters.
+    """
     n_assets = len(returns.columns)
     if n_assets == 0:
         return pd.Series(dtype=float)
     return pd.Series(1.0 / n_assets, index=returns.columns)
 
 def inverse_volatility_weight(returns: pd.DataFrame) -> pd.Series:
-    """Return weights proportional to 1/volatility."""
+    """Weights proportional to 1/volatility, computed from log returns.
+
+    Volatility is the per-period standard deviation of the supplied log
+    returns; no annualisation is applied because the result is scale-invariant
+    after normalising weights to sum to 1.
+    """
     if returns.empty or len(returns) < 2:
         return equal_weight(returns)
     vol = returns.std()
@@ -22,7 +31,13 @@ def inverse_volatility_weight(returns: pd.DataFrame) -> pd.Series:
     return weights
 
 def min_variance_weight(returns: pd.DataFrame, x0: np.ndarray | None = None) -> pd.Series:
-    """Find weights that minimize portfolio variance using SLSQP."""
+    """Find weights that minimise portfolio variance using SLSQP.
+
+    Inputs are expected to be log returns; a Ledoit-Wolf shrunk covariance
+    matrix is estimated from them.  Long-only, fully-invested simplex
+    constraints (sum(w)=1, 0 ≤ w ≤ 1).  Falls back to equal weight on
+    optimisation failure.
+    """
     if returns.empty or len(returns.columns) < 1:
         return pd.Series(dtype=float)
     if len(returns.columns) == 1:
@@ -43,7 +58,14 @@ def min_variance_weight(returns: pd.DataFrame, x0: np.ndarray | None = None) -> 
     return pd.Series(res.x, index=returns.columns)
 
 def max_sharpe_weight(returns: pd.DataFrame, rf: float = 0.0, x0: np.ndarray | None = None) -> pd.Series:
-    """Find weights that maximize the Sharpe ratio using SLSQP."""
+    """Find weights that maximise the Sharpe ratio using SLSQP.
+
+    Inputs are expected to be log returns; both the mean vector and a
+    Ledoit-Wolf shrunk covariance matrix are estimated from them.  Long-only,
+    fully-invested simplex constraints.  *rf* is a per-period risk-free rate
+    in the same units as the supplied returns (default 0).  Falls back to
+    equal weight on optimisation failure.
+    """
     if returns.empty or len(returns.columns) < 1:
         return pd.Series(dtype=float)
     if len(returns.columns) == 1:
@@ -67,11 +89,13 @@ def max_sharpe_weight(returns: pd.DataFrame, rf: float = 0.0, x0: np.ndarray | N
     return pd.Series(res.x, index=returns.columns)
 
 def momentum_weight(returns: pd.DataFrame) -> pd.Series:
-    """Weight assets proportionally to their recent cumulative return (momentum).
+    """Weight assets proportionally to their cumulative return (momentum).
 
-    Assets with non-positive momentum receive zero weight; the remaining
-    budget is allocated proportionally to positive-momentum assets.
-    Falls back to equal weight when all momentum signals are non-positive.
+    Inputs must be log returns: cumulative simple return over the look-back
+    window is computed as ``exp(sum(log_returns)) - 1``.  Assets with
+    non-positive momentum receive zero weight; the remaining budget is
+    allocated proportionally to positive-momentum assets.  Falls back to
+    equal weight when all momentum signals are non-positive.
     """
     if returns.empty or len(returns) < 2:
         return equal_weight(returns)
@@ -123,9 +147,13 @@ def walk_forward_backtest(
           log returns supplied via *open_returns*.
           *window_size* is interpreted in **weeks** (× 5 trading days).
     open_returns : pd.DataFrame | None
-        Open-to-open log returns aligned with the signal date (row T holds
-        log(Open[T+1]/Open[T])).  Required when *rebalance_frequency* is
-        "Daily"; ignored otherwise.
+        Open-to-open log returns in the standard trailing-return convention:
+        row T holds log(Open[T] / Open[T-1]) — i.e. the return *ending* at T,
+        as produced by ``data.open_to_open_log_returns``.  The engine compensates
+        for this by reading row i+1 to obtain the forward return earned by the
+        signal at day i (signal seen overnight at close[i-1], traded at open[i],
+        marked at open[i+1]).  Required when *rebalance_frequency* is "Daily";
+        ignored otherwise.
 
     Handles tickers whose data starts later than the backtest start date:
     they are excluded (weight = 0) until their first non-NaN observation,
@@ -215,6 +243,12 @@ def walk_forward_backtest(
                 should_rebalance = True
 
         if should_rebalance:
+            # Snapshot the pre-trade portfolio composition (drift-adjusted weights
+            # carried over from the end of the previous period) so we can compute
+            # turnover against what we *actually* hold right now, not against the
+            # previous period's recorded start-of-period weights.
+            pre_trade_alloc = asset_alloc.copy()
+
             if window_type == "Rolling":
                 start_idx    = max(0, i - scaled_window)
                 available_data = returns.iloc[start_idx:i][active_cols].dropna()
@@ -243,8 +277,7 @@ def walk_forward_backtest(
 
             # --- Apply transaction cost based on turnover ---
             if fee_rate > 0 and i > 0:
-                prev_weights = weights_hist[-1] if weights_hist else pd.Series(0.0, index=all_cols)
-                turnover = (asset_alloc - prev_weights).abs().sum() / 2.0
+                turnover = (asset_alloc - pre_trade_alloc).abs().sum() / 2.0
                 fee_cost = turnover * fee_rate
                 # Scale down allocations to reflect the fee paid out of portfolio value
                 asset_alloc = asset_alloc * (1.0 - fee_cost)

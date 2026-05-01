@@ -24,8 +24,8 @@ A multi-strategy portfolio backtester with an interactive Streamlit dashboard. D
 |---|---|
 | **Equal Weight** | 1/N allocation across all active assets. Estimation-free benchmark. |
 | **Inverse Volatility** | Weights proportional to 1/σ. No covariance estimation required. |
-| **Minimum Variance** | Solves min w′Σw (SLSQP) using a Ledoit-Wolf shrinkage covariance matrix. |
-| **Maximum Sharpe** | Maximises (w′μ − r_f) / √(w′Σw) (SLSQP), long-only, fully invested. |
+| **Minimum Variance** | Solves min w′Σw (SLSQP) with a Ledoit-Wolf shrinkage covariance matrix; long-only, fully invested. |
+| **Maximum Sharpe** | Maximises (w′μ − r_f) / √(w′Σw) (SLSQP) with a Ledoit-Wolf shrinkage covariance matrix; long-only, fully invested. |
 | **Momentum** | Weights proportional to cumulative return over the look-back window; zero weight for negative-momentum assets. |
 
 ---
@@ -88,10 +88,12 @@ Then in the sidebar:
 
 | Parameter | Options | Notes |
 |---|---|---|
-| Rebalance Frequency | Daily, Monthly | Daily uses open-to-open execution returns |
-| Window Type | Rolling, Expanding | Expanding uses all history up to each rebalance date |
-| Window Size | 1–52 weeks (daily) / 1–36 months (monthly) | Rolling only |
-| Transaction Fee | 0–50 bps | Applied to one-way turnover at each rebalance |
+| Rebalance Frequency | Daily, Monthly | Distinct from data frequency (see below). Daily rebalancing trades at each open and uses open-to-open execution returns for P&L. |
+| Data Frequency | Daily, Monthly | Only exposed when *Rebalance Frequency* is Monthly — picks whether the look-back uses daily or month-end closes. Daily rebalancing forces daily data. |
+| Window Type | Rolling, Expanding | Expanding uses all history up to each rebalance date. |
+| Rolling Window Size | 1–52 weeks (daily) / 1–36 months (monthly) | Rolling only. |
+| Expanding Window Start Size | 1–52 weeks (daily) / 1–36 months (monthly) | Expanding only — minimum look-back required before the strategy is called; equal weight is used during the warm-up. |
+| Transaction Fee | 0–50 bps | One-way cost in basis points, applied to portfolio turnover at each rebalance. |
 
 ---
 
